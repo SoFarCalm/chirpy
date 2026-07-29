@@ -50,12 +50,3 @@ func replaceBadWords(s string, badWords []string) string {
 
 	return cleanedWords
 }
-
-// Assuming the length validation passed, replace any of the following words in the Chirp with the static 4-character string ****:
-// kerfuffle
-// sharbert
-// fornax
-
-// Be sure to match against uppercase versions of the words as well, but not punctuation. "Sharbert!" does not need to be replaced, we'll consider it a different word due to the exclamation point.
-
-// Finally, instead of the valid boolean, your handler should always return the cleaned version of the text in a JSON response, even if nothing changed:
