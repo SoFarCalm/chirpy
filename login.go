@@ -3,16 +3,11 @@ package main
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
-	auth "github.com/SoFarCalm/chirpy/internal/auth"
+	"github.com/SoFarCalm/chirpy/internal/auth"
+	"github.com/SoFarCalm/chirpy/internal/database"
 )
-
-// type User struct {
-// 	ID        uuid.UUID `json:"id"`
-// 	CreatedAt time.Time `json:"created_at"`
-// 	UpdatedAt time.Time `json:"updated_at"`
-// 	Email     string    `json:"email"`
-// }
 
 func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 	type parameters struct {
@@ -37,12 +32,26 @@ func (cfg *apiConfig) handlerUserLogin(w http.ResponseWriter, r *http.Request) {
 		respondWithError(w, http.StatusUnauthorized, "Incorrect email or password", err)
 	}
 
+	accessToken, err := auth.MakeJWT(user.ID, cfg.JWTSecret, time.Hour)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't create JWT", err)
+	}
+
+	generateRefreshToken := auth.MakeRefreshToken()
+	refreshToken, err := cfg.db.CreateRefreshToken(r.Context(), database.CreateRefreshTokenParams{
+		Token:     generateRefreshToken,
+		UserID:    user.ID,
+		ExpiresAt: time.Now().Add(60 * 24 * time.Hour), // Set the refresh token to expire in 60 days
+	})
+
 	if isMatch {
 		respondWithJSON(w, http.StatusOK, User{
-			ID:        user.ID,
-			CreatedAt: user.CreatedAt,
-			UpdatedAt: user.UpdatedAt,
-			Email:     user.Email,
+			ID:           user.ID,
+			CreatedAt:    user.CreatedAt,
+			UpdatedAt:    user.UpdatedAt,
+			Email:        user.Email,
+			Token:        accessToken,
+			RefreshToken: refreshToken.Token,
 		})
 	}
 

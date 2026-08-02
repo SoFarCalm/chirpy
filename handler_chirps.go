@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/SoFarCalm/chirpy/internal/auth"
 	"github.com/SoFarCalm/chirpy/internal/database"
 	"github.com/google/uuid"
 )
@@ -16,6 +17,46 @@ type Chirp struct {
 	UpdatedAt time.Time `json:"updated_at"`
 	Body      string    `json:"body"`
 	UserID    uuid.UUID `json:"user_id"`
+}
+
+func (cfg *apiConfig) handlerChirpDelete(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Missing or invalid token", err)
+		return
+	}
+
+	id, err := auth.ValidateJWT(token, cfg.JWTSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid token", err)
+		return
+	}
+
+	reqChirpID := r.PathValue("chirpID")
+	parsedID, err := uuid.Parse(reqChirpID)
+	if err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid chirp ID", err)
+		return
+	}
+
+	chirp, err := cfg.db.GetChirp(r.Context(), parsedID)
+	if err != nil {
+		respondWithError(w, http.StatusNotFound, "Couldn't find Chirp :( ", err)
+		return
+	}
+
+	if chirp.UserID != id {
+		respondWithError(w, http.StatusForbidden, "You are not the owner of this chirp", nil)
+		return
+	}
+
+	err = cfg.db.DeleteChirp(r.Context(), parsedID)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't delete chirp", err)
+		return
+	}
+
+	respondWithJSON(w, http.StatusNoContent, "")
 }
 
 func (cfg *apiConfig) handlerChirpGet(w http.ResponseWriter, r *http.Request) {
@@ -67,9 +108,21 @@ func (cfg *apiConfig) handlerChirpsGet(w http.ResponseWriter, r *http.Request) {
 }
 
 func (cfg *apiConfig) handlerChirpCreate(w http.ResponseWriter, r *http.Request) {
+	token, err := auth.GetBearerToken(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Missing or invalid token", err)
+		return
+	}
+
+	id, err := auth.ValidateJWT(token, cfg.JWTSecret)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Invalid token", err)
+		return
+	}
+
 	type parameters struct {
-		Body   string    `json:"body"`
-		UserID uuid.UUID `json:"user_id"`
+		Body string `json:"body"`
+		//UserID uuid.UUID `json:"user_id"`
 	}
 	type returnVals struct {
 		Chirp
@@ -77,7 +130,7 @@ func (cfg *apiConfig) handlerChirpCreate(w http.ResponseWriter, r *http.Request)
 
 	decoder := json.NewDecoder(r.Body)
 	params := parameters{}
-	err := decoder.Decode(&params)
+	err = decoder.Decode(&params)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters", err)
 		return
@@ -93,7 +146,7 @@ func (cfg *apiConfig) handlerChirpCreate(w http.ResponseWriter, r *http.Request)
 
 	chirp, err := cfg.db.CreateChirp(r.Context(), database.CreateChirpParams{
 		Body:   params.Body,
-		UserID: params.UserID,
+		UserID: id,
 	})
 	if err != nil {
 		log.Printf("Error creating chirp %s", err)

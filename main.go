@@ -18,6 +18,7 @@ type apiConfig struct {
 	fileserverHits atomic.Int32
 	db             *database.Queries
 	platform       string
+	JWTSecret      string
 }
 
 func main() {
@@ -25,6 +26,7 @@ func main() {
 	const port = "8080"
 
 	godotenv.Load()
+
 	dbURL := os.Getenv("DB_URL")
 	if dbURL == "" {
 		log.Fatal("DB_URL must be set")
@@ -40,10 +42,16 @@ func main() {
 	}
 	dbQueries := database.New(dbConn)
 
+	JWTSecret := os.Getenv("SECRET_KEY")
+	if JWTSecret == "" {
+		log.Fatal("SECRET_KEY must be set")
+	}
+
 	apiCfg := apiConfig{
 		fileserverHits: atomic.Int32{},
 		db:             dbQueries,
 		platform:       platform,
+		JWTSecret:      JWTSecret,
 	}
 
 	mux := http.NewServeMux()
@@ -54,9 +62,13 @@ func main() {
 	mux.HandleFunc("POST /api/chirps", apiCfg.handlerChirpCreate)
 	mux.HandleFunc("GET /api/chirps", apiCfg.handlerChirpsGet)
 	mux.HandleFunc("GET /api/chirps/{chirpID}", apiCfg.handlerChirpGet)
+	mux.HandleFunc("DELETE /api/chirps/{chirpID}", apiCfg.handlerChirpDelete)
 
 	mux.HandleFunc("POST /api/users", apiCfg.handlerUsersCreate)
 	mux.HandleFunc("POST /api/login", apiCfg.handlerUserLogin)
+	mux.HandleFunc("POST /api/refresh", apiCfg.handlerUserRefreshToken)
+	mux.HandleFunc("POST /api/revoke", apiCfg.handlerRevokeRefreshToken)
+	mux.HandleFunc("PUT /api/users", apiCfg.handlerUserUpdate)
 
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
