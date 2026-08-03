@@ -111,6 +111,16 @@ func MakeRefreshToken() string {
 	return hex.EncodeToString(token)
 }
 
+func GetAPIKey(headers http.Header) (string, error) {
+	headerAuthorization := headers.Get("Authorization")
+	if headerAuthorization == "" {
+		return "", errors.New("missing API key")
+	}
+
+	apiKey := strings.Split(headerAuthorization, " ")[1]
+	return apiKey, nil
+}
+
 // func MakeJWT(userID uuid.UUID, tokenSecret string, expiresIn time.Duration) (string, error) {
 
 // 	claims := &jwt.RegisteredClaims{

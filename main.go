@@ -19,6 +19,7 @@ type apiConfig struct {
 	db             *database.Queries
 	platform       string
 	JWTSecret      string
+	PolkaKey       string
 }
 
 func main() {
@@ -47,11 +48,17 @@ func main() {
 		log.Fatal("SECRET_KEY must be set")
 	}
 
+	PolkaKey := os.Getenv("POLKA_KEY")
+	if PolkaKey == "" {
+		log.Fatal("POLKA_KEY must be set")
+	}
+
 	apiCfg := apiConfig{
 		fileserverHits: atomic.Int32{},
 		db:             dbQueries,
 		platform:       platform,
 		JWTSecret:      JWTSecret,
+		PolkaKey:       PolkaKey,
 	}
 
 	mux := http.NewServeMux()
@@ -72,6 +79,7 @@ func main() {
 
 	mux.HandleFunc("POST /admin/reset", apiCfg.handlerReset)
 	mux.HandleFunc("GET /admin/metrics", apiCfg.handlerMetrics)
+	mux.HandleFunc("POST /api/polka/webhooks", apiCfg.handlerUpgradeUserStatus)
 
 	srv := &http.Server{
 		Addr:    ":" + port,

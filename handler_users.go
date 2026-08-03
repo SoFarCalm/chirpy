@@ -1,6 +1,7 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
 	"log"
 	"net/http"
@@ -18,6 +19,55 @@ type User struct {
 	Email        string    `json:"email"`
 	Token        string    `json:"token"`
 	RefreshToken string    `json:"refresh_token"`
+	ChirpyRed    bool      `json:"is_chirpy_red"`
+}
+
+func (cfg *apiConfig) handlerUpgradeUserStatus(w http.ResponseWriter, r *http.Request) {
+	apiKey, err := auth.GetAPIKey(r.Header)
+	if err != nil {
+		respondWithError(w, http.StatusUnauthorized, "Missing or invalid API key", err)
+		return
+	}
+
+	if apiKey != cfg.PolkaKey {
+		respondWithError(w, http.StatusUnauthorized, "Invalid API key", nil)
+		return
+	}
+
+	type parameters struct {
+		Event string `json:"event"`
+		Data  struct {
+			ID uuid.UUID `json:"user_id"`
+		}
+	}
+
+	decoder := json.NewDecoder(r.Body)
+	params := parameters{}
+	err = decoder.Decode(&params)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Couldn't decode parameters", err)
+		return
+	}
+
+	if params.Event != "user.upgraded" {
+		respondWithError(w, http.StatusNoContent, "Invalid event type", nil)
+		log.Printf("Invalid event type: %s", params.Event)
+		return
+	}
+
+	if params.Event == "user.upgraded" {
+		log.Printf("Upgrading user status for user ID: %s", params.Data.ID)
+		_, err := cfg.db.UpdateUserChirpyRedStatus(r.Context(), database.UpdateUserChirpyRedStatusParams{
+			ID:          params.Data.ID,
+			IsChirpyRed: sql.NullBool{Bool: true, Valid: true},
+		})
+		if err != nil {
+			respondWithError(w, http.StatusNotFound, "Couldn't update user status", err)
+			return
+		}
+	}
+
+	respondWithJSON(w, http.StatusNoContent, "")
 }
 
 func (cfg *apiConfig) handlerUserUpdate(w http.ResponseWriter, r *http.Request) {
@@ -67,6 +117,7 @@ func (cfg *apiConfig) handlerUserUpdate(w http.ResponseWriter, r *http.Request) 
 			CreatedAt: user.CreatedAt,
 			UpdatedAt: user.UpdatedAt,
 			Email:     user.Email,
+			ChirpyRed: user.IsChirpyRed.Bool,
 		},
 	})
 
@@ -109,6 +160,7 @@ func (cfg *apiConfig) handlerUsersCreate(w http.ResponseWriter, r *http.Request)
 			CreatedAt: user.CreatedAt,
 			UpdatedAt: user.UpdatedAt,
 			Email:     user.Email,
+			ChirpyRed: user.IsChirpyRed.Bool,
 		},
 	})
 }
